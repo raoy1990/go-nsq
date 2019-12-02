@@ -158,9 +158,9 @@ func (w *Producer) Stop() {
 // the supplied `doneChan` (if specified)
 // will receive a `ProducerTransaction` instance with the supplied variadic arguments
 // and the response error if present
-func (w *Producer) PublishAsync(topic string, body []byte, doneChan chan *ProducerTransaction,
+func (w *Producer) PublishAsync(topic string, group int,body []byte, doneChan chan *ProducerTransaction,
 	args ...interface{}) error {
-	return w.sendCommandAsync(Publish(topic, body), doneChan, args)
+	return w.sendCommandAsync(Publish(topic,group, body), doneChan, args)
 }
 
 // MultiPublishAsync publishes a slice of message bodies to the specified topic
@@ -181,8 +181,8 @@ func (w *Producer) MultiPublishAsync(topic string, body [][]byte, doneChan chan 
 
 // Publish synchronously publishes a message body to the specified topic, returning
 // an error if publish failed
-func (w *Producer) Publish(topic string, body []byte) error {
-	return w.sendCommand(Publish(topic, body))
+func (w *Producer) Publish(topic string, group int,body []byte) error {
+	return w.sendCommand(Publish(topic,group, body))
 }
 
 // MultiPublish synchronously publishes a slice of message bodies to the specified topic, returning

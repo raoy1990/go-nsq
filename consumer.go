@@ -138,6 +138,9 @@ type Consumer struct {
 	// read from this channel to block until consumer is cleanly stopped
 	StopChan chan int
 	exitChan chan int
+
+	//chanGroup
+	ChanGroup []chan *Message
 }
 
 // NewConsumer creates a new instance of Consumer for the specified topic/channel
@@ -182,6 +185,7 @@ func NewConsumer(topic string, channel string, config *Config) (*Consumer, error
 
 		StopChan: make(chan int),
 		exitChan: make(chan int),
+		ChanGroup: make([]chan *Message,0),
 	}
 	r.wg.Add(1)
 	go r.rdyLoop()
@@ -1085,15 +1089,27 @@ func (r *Consumer) AddConcurrentHandlers(handler Handler, concurrency int) {
 
 	atomic.AddInt32(&r.runningHandlers, int32(concurrency))
 	for i := 0; i < concurrency; i++ {
-		go r.handlerLoop(handler)
+		msgChan := make(chan *Message,100)
+		r.ChanGroup = append(r.ChanGroup,msgChan)
+		go r.handlerLoop(handler,msgChan)
 	}
+
+	go func() {
+		for  {
+			msg,ok := <- r.incomingMessages
+			if !ok {
+				return
+			}
+			msgChan := r.ChanGroup[msg.Group % concurrency]
+			msgChan <- msg
+		}
+	}()
 }
 
-func (r *Consumer) handlerLoop(handler Handler) {
+func (r *Consumer) handlerLoop(handler Handler,msgChan chan *Message) {
 	r.log(LogLevelDebug, "starting Handler")
-
 	for {
-		message, ok := <-r.incomingMessages
+		message, ok := <- msgChan
 		if !ok {
 			goto exit
 		}
