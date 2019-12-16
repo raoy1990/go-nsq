@@ -21,7 +21,7 @@ type Message struct {
 	Body      []byte
 	Timestamp int64
 	Attempts  uint16
-	Group int
+	Group     int
 
 	NSQDAddress string
 
@@ -113,6 +113,7 @@ func (m *Message) doRequeue(delay time.Duration, backoff bool) {
 // avoid performing many system calls.
 func (m *Message) WriteTo(w io.Writer) (int64, error) {
 	var buf [10]byte
+	var gbuf [2]byte
 	var total int64
 
 	binary.BigEndian.PutUint64(buf[:8], uint64(m.Timestamp))
@@ -136,31 +137,39 @@ func (m *Message) WriteTo(w io.Writer) (int64, error) {
 		return total, err
 	}
 
+	binary.BigEndian.PutUint16(gbuf[:2], uint16(m.Group))
+	n, err = w.Write(gbuf[:])
+	total += int64(n)
+	if err != nil {
+		return total, err
+	}
+
+
 	return total, nil
 }
 
 // DecodeMessage deserializes data (as []byte) and creates a new Message
 // message format:
-//  [x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x]...
-//  |       (int64)        ||    ||    ||  (hex string encoded in ASCII)           || (binary)
-//  |       8-byte         ||    ||    ||             16-byte                      || N-byte
+//  [x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x][x]...[x][x]
+//  |       (int64)        ||      (hex string encoded in ASCII)           || (binary)          ||    ||
+//  |       8-byte         ||                 16-byte                      || N-byte            ||    ||
 //  ------------------------------------------------------------------------------------------...
-//    nanosecond timestamp    ^^     ^^              message ID                       message body
-//                         (uint16)(uint16)
-//                          2-byte  2-byte
-//                         attempts Group
+//    nanosecond timestamp    ^^                  message ID                       message body    ^^
+//                         (uint16)                                                               (uint16)
+//                          2-byte                                                                 2-byte
+//                         attempts                                                                Group
 func DecodeMessage(b []byte) (*Message, error) {
 	var msg Message
 
-	if len(b) < 10+MsgIDLength {
+	if len(b) < 12+MsgIDLength {
 		return nil, errors.New("not enough data to decode valid message")
 	}
 
 	msg.Timestamp = int64(binary.BigEndian.Uint64(b[:8]))
 	msg.Attempts = binary.BigEndian.Uint16(b[8:10])
-	msg.Group = int(binary.BigEndian.Uint16(b[10:12]))
-	copy(msg.ID[:], b[12:12+MsgIDLength])
-	msg.Body = b[12+MsgIDLength:]
+	copy(msg.ID[:], b[10:10+MsgIDLength])
+	msg.Body = b[10+MsgIDLength:len(b)-2]
 
+	msg.Group = int(binary.BigEndian.Uint16(b[len(b)-2:]))
 	return &msg, nil
 }
