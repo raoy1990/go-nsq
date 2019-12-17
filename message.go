@@ -3,6 +3,7 @@ package nsq
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"sync/atomic"
 	"time"
@@ -164,6 +165,8 @@ func DecodeMessage(b []byte) (*Message, error) {
 	if len(b) < 12+MsgIDLength {
 		return nil, errors.New("not enough data to decode valid message")
 	}
+
+	fmt.Println("===timestamp===",msg.Timestamp,"======",b[0])
 
 	msg.Timestamp = int64(binary.BigEndian.Uint64(b[:8]))
 	msg.Attempts = binary.BigEndian.Uint16(b[8:10])
