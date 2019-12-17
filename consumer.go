@@ -1095,12 +1095,17 @@ func (r *Consumer) AddConcurrentHandlers(handler Handler, concurrency int) {
 	}
 
 	go func() {
+		rand.Seed(time.Now().Unix())
 		for  {
 			msg,ok := <- r.incomingMessages
 			if !ok {
 				return
 			}
+			//兼容老版本，producer控制有效group从1开始
 			msgChan := r.ChanGroup[msg.Group % concurrency]
+			if msg.Group == 0 {
+				msgChan = r.ChanGroup[int(rand.Int31n(int32(concurrency)))]
+			}
 			msgChan <- msg
 		}
 	}()
